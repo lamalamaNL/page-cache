@@ -225,17 +225,23 @@ class Cache
      */
     protected function getDirectoryAndFileNames($request, $response)
     {
-        $path = str_replace(config('app.url'), '', $request->fullUrl());
-
-        $segments = explode('/', ltrim($path, '/'));
-
+        $segments = explode('/', ltrim($request->getPathInfo(), '/'));
+        $fullUrl = config('app/url').$_SERVER['REQUEST_URI'];
         $filename = $this->aliasFilename(array_pop($segments));
         $extension = $this->guessFileExtension($response);
-        $filename = str_replace('?', '_', $filename);
+        $urlParts = parse_url($fullUrl);
+        $pathParts = pathinfo($urlParts['path']);
+        $slug = $pathParts['basename'];
+        $query = $this->arrGet($urlParts, 'query', '');
 
-        $file = "{$filename}.{$extension}";
+        if (isset($query[0]['query'])) {
+            $basename = $slug . '_' . $query[0]['query'] . '.html';
+        }
+        else {
+            $basename = "{$filename}.{$extension}";
+        }
 
-        return [$this->getCachePath(implode('/', $segments)), $file];
+        return [$this->getCachePath(implode('/', $segments)), $basename];
     }
 
     /**
@@ -349,6 +355,82 @@ class Cache
     public function getPageType()
     {
         return $this->pageType;
+    }
+
+    /**
+     * @param  mixed  $content
+     * @return string
+     */
+    protected function normalizeContent($content)
+    {
+        if ($content instanceof Response) {
+            $content = $content->content();
+        }
+
+        return $content;
+    }
+
+    public function cacheUrl($key, $url)
+    {
+        $this->cacheDomain();
+
+        $urls = $this->getUrls();
+
+        $url = Str::removeLeft($url, $this->getBaseUrl());
+
+        $urls->put($key, $url);
+
+        $this->cache->forever($this->getUrlsCacheKey(), $urls->all());
+    }
+
+    /**
+     * Cache a page.
+     *
+     * @param  \Illuminate\Http\Request  $request  Request associated with the page to be cached
+     * @param  string  $content  The response content to be cached
+     */
+    public function cachePage(Request $request, $content)
+    {
+        $url = $this->getUrl($request);
+
+        if ($this->isExcluded($url)) {
+            return;
+        }
+
+        $content = $this->normalizeContent($content);
+
+        $path = $this->getFilePath($request->getUri());
+
+        if (! $this->writer->write($path, $content, $this->config('lock_hold_length'))) {
+            return;
+        }
+
+        $this->cacheUrl($this->makeHash($url), $url);
+    }
+
+    /**
+     * Get a hashed string representation of a URL.
+     *
+     * @param  string  $url
+     * @return string
+     */
+    protected function makeHash($url)
+    {
+        return md5($url);
+    }
+
+    private function isBasenameTooLong($basename)
+    {
+        return strlen($basename) > 255;
+    }
+
+    private function arrGet($array, $key, $default = null)
+    {
+        if ($key) {
+            $key = str_replace(':', '.', $key);
+        }
+
+        return [$array, $key, $default];
     }
 
 }
