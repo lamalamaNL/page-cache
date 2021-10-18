@@ -231,6 +231,7 @@ class Cache
 
         $filename = $this->aliasFilename(array_pop($segments));
         $extension = $this->guessFileExtension($response);
+        $filename = str_replace('?', '_', $filename);
 
         $file = "{$filename}.{$extension}";
 
