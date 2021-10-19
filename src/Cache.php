@@ -176,16 +176,32 @@ class Cache
     {
         list($path, $file) = $this->getDirectoryAndFileNames($request, $response);
 
-        $this->files->makeDirectory($path, 0775, true, true);
+//        $this->files->makeDirectory($path, 0775, true, true);
 
-        $this->files->put(
-            $this->join([$path, $file]),
-            $response->getContent(),
-            true
-        );
+        $fileJoined = $this->join([$path, $file]);
+//        $this->files->put(
+//            $fileJoined,
+//            $response->getContent(),
+//            true
+//        );
+
+        @mkdir(dirname($path.'/'.$file), 0777, true);
+
+        // Create the file handle. We use the "c" mode which will avoid writing an
+        // empty file if we abort when checking the lock status in the next step.
+        $handle = fopen($path.'/'.$file, 'c');
+
+
+        fwrite($handle, $response->getContent());
+        chmod($path.'/'.$file, 0777);
+
+        // Hold the file lock for a moment to prevent other processes from trying to write the same file.
+        sleep(0);
+
+        fclose($handle);
 
         \App\Models\CacheIndex::create([
-            'path' => $this->join([$path, $file]),
+            'path' => $fileJoined,
             'page_type' => $this->pageType,
             'expire_at' => \Carbon\Carbon::now()->addMinutes($this->expireAt),
         ]);
@@ -236,12 +252,13 @@ class Cache
 
         if (isset($query[0]['query'])) {
             $basename = $slug . '_' . $query[0]['query'] . '.html';
+            return [$this->getCachePath($slug), $basename];
         }
         else {
             $basename = "{$filename}.{$extension}";
+            return [$this->getCachePath(implode('/',$segments )), $basename];
         }
 
-        return [$this->getCachePath(implode('/', $segments)), $basename];
     }
 
     /**
@@ -381,31 +398,6 @@ class Cache
         $urls->put($key, $url);
 
         $this->cache->forever($this->getUrlsCacheKey(), $urls->all());
-    }
-
-    /**
-     * Cache a page.
-     *
-     * @param  \Illuminate\Http\Request  $request  Request associated with the page to be cached
-     * @param  string  $content  The response content to be cached
-     */
-    public function cachePage(Request $request, $content)
-    {
-        $url = $this->getUrl($request);
-
-        if ($this->isExcluded($url)) {
-            return;
-        }
-
-        $content = $this->normalizeContent($content);
-
-        $path = $this->getFilePath($request->getUri());
-
-        if (! $this->writer->write($path, $content, $this->config('lock_hold_length'))) {
-            return;
-        }
-
-        $this->cacheUrl($this->makeHash($url), $url);
     }
 
     /**
