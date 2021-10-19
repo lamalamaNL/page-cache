@@ -176,14 +176,7 @@ class Cache
     {
         list($path, $file) = $this->getDirectoryAndFileNames($request, $response);
 
-//        $this->files->makeDirectory($path, 0775, true, true);
-
         $fileJoined = $this->join([$path, $file]);
-//        $this->files->put(
-//            $fileJoined,
-//            $response->getContent(),
-//            true
-//        );
 
         @mkdir(dirname($path.'/'.$file), 0777, true);
 
@@ -251,8 +244,8 @@ class Cache
         $query = $this->arrGet($urlParts, 'query', '');
 
         if (isset($query[0]['query'])) {
-            $basename = $slug . '_' . $query[0]['query'] . '.html';
-            return [$this->getCachePath($slug), $basename];
+            $basename = '_' . $query[0]['query'] . '.html';
+            return [$this->getCachePath(implode('/',$segments )), $basename];
         }
         else {
             $basename = "{$filename}.{$extension}";
