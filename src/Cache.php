@@ -239,19 +239,59 @@ class Cache
         $filename = $this->aliasFilename(array_pop($segments));
         $extension = $this->guessFileExtension($response);
         $urlParts = parse_url($fullUrl);
-        $pathParts = pathinfo($urlParts['path']);
-        $slug = $pathParts['basename'];
         $query = $this->arrGet($urlParts, 'query', '');
 
-        if (isset($query[0]['query'])) {
-            $basename = '_' . $query[0]['query'] . '.html';
-            return [$this->getCachePath(implode('/',$segments )), $basename];
-        }
-        else {
-            $basename = "{$filename}.{$extension}";
+        if (isset($query[0]['query']) && $this->filterQuery($query[0]['query']) !== null) {
+            $basename = '_' . $this->filterQuery($query[0]['query']) . '.html';
             return [$this->getCachePath(implode('/',$segments )), $basename];
         }
 
+        $basename = "{$filename}.{$extension}";
+        return [$this->getCachePath(implode('/',$segments )), $basename];
+    }
+
+    /**
+     * Check if the filter is allowed and accept only the first 2 query's
+     * @param $query
+     * @return string|null
+     */
+    private function filterQuery($query)
+    {
+        if (config('cache-whitelist.tags') === null) {
+            return null;
+        }
+
+        if (strpos($query, '&') === false) {
+            $query = explode('=', $query);
+            if (!in_array($query[0], config('cache-whitelist.tags'))) {
+                return null;
+            }
+            return $query[0].'='.$query[1];
+        }
+
+        $query = explode('&', $query);
+        $queryPartOne = explode('=', $query[0]);
+        $queryPartTow = explode('=', $query[1]);
+        $combineQuery = '';
+
+        if (!in_array($queryPartOne[0], config('cache-whitelist.tags')) &&
+            !in_array($queryPartTow[0], config('cache-whitelist.tags'))) {
+            return null;
+        }
+
+        if (in_array($queryPartOne[0], config('cache-whitelist.tags'))) {
+            $combineQuery .= $queryPartOne[0].'='.$queryPartOne[1];
+        }
+        if (in_array($queryPartTow[0], config('cache-whitelist.tags'))) {
+            if ($combineQuery === '') {
+                $combineQuery .= $queryPartTow[0] . '=' . $queryPartTow[1];
+            }
+            else {
+                $combineQuery .= '&' . $queryPartTow[0] . '=' . $queryPartTow[1];
+            }
+        }
+
+        return $combineQuery;
     }
 
     /**
