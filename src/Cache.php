@@ -5,8 +5,6 @@ namespace Silber\PageCache;
 use Exception;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Contracts\Container\Container;
-use Statamic\Support\Arr;
-use Statamic\Support\Str;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -227,87 +225,25 @@ class Cache
      */
     protected function getDirectoryAndFileNames($request, $response)
     {
-        $filename = $this->getFilePath($this->getUrl($request), $response);
-        $pathInfo = pathinfo($filename);
-        //dd($filename);
-        return [$pathInfo['dirname'], $pathInfo['basename']];
-    }
+        $segments = explode('/', ltrim($request->getPathInfo(), '/'));
 
-    /**
-     * Get the URL from a request.
-     *
-     * @param  Request  $request
-     * @return string
-     */
-    public function getUrl(Request $request)
-    {
-        $url = $request->getUri();
-
-        if (config('page-cache.ignore_query_strings')) {
-            $url = explode('?', $url)[0];
-        }
-
-        return $url;
-    }
-
-    /**
-     * Get the path to the cached file.
-     *
-     * @param $url
-     * @return string
-     */
-    public function getFilePath($url, $response)
-    {
-        $urlParts = parse_url($url);
-        $pathParts = pathinfo($urlParts['path']);
-        $slug = $pathParts['basename'];
-        $query = $this->calculateQuery($urlParts);
+        $filename = $this->aliasFilename(array_pop($segments));
         $extension = $this->guessFileExtension($response);
-        if ($this->isBasenameTooLong($basename = $slug.'_'.$query.'.'.$extension)) {
-            $basename = $slug.'_lqs_'.md5($query).'.'.$extension;
-        }
 
-        return $this->getCachePath().$pathParts['dirname'].'/'.$basename;
+        $file = "{$filename}.{$extension}";
+
+        return [$this->getCachePath(implode('/', $segments)), $file];
     }
 
-    private function calculateQuery(array $urlParts)
+    /**
+     * Alias the filename if necessary.
+     *
+     * @param  string  $filename
+     * @return string
+     */
+    protected function aliasFilename($filename)
     {
-        if (config('page-cache.ignore_query_strings')) {
-            return '';
-        }
-        $query = Arr::get($urlParts, 'query', '');
-        if (config('page-cache.query_strings_params_whitelist')) {
-            $query = $this->filterQStringByWhitelist($query);
-        }
-
-        return $query;
-
-    }
-
-    private function filterQStringByWhitelist($query) : string
-    {
-        $whitelist = config('page-cache.query_strings_params_whitelist');
-        $approvedParts = [];
-        $parts = explode('&', $query);
-        foreach ($parts as $part) {
-            $partParts = explode('=', $part);
-            if(in_array($partParts[0], $whitelist)) {
-                $approvedParts[] = $part;
-            }
-        }
-        // TODO: Order van de parameters. Lijkt al goed te gaan. Maar hoe kan dat?
-        return implode('&', $approvedParts);
-
-    }
-
-    private function isBasenameTooLong($basename)
-    {
-        return strlen($basename) > config('page-cache.max_filename_length', 255);
-    }
-
-    private function isLongQueryStringPath($path)
-    {
-        return Str::contains($path, '_lqs_');
+        return $filename ?: 'pc__index__pc';
     }
 
     /**
@@ -318,8 +254,8 @@ class Cache
     protected function getDefaultCachePath()
     {
         if ($this->container && $this->container->bound('path.public')) {
-            $cachePath = $this->container->make('path.public').'/'.config('page-cache.cache-path').'/';
-            if ($this->locale && config('page-cache.multisite')) {
+            $cachePath = $this->container->make('path.public').'/static/';
+            if ($this->locale) {
                 $sites = config('statamic.sites.sites');
                 $subFolder = '';
                 foreach ($sites as $site) {
