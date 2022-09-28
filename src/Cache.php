@@ -364,8 +364,12 @@ class Cache
             return true;
         }
 
-        foreach ($request->all() as $param) {
-            if(in_array($param, $this->querystringWhitelist)) {
+        if (count($request->all()) === 0) {
+            return true;
+        }
+
+        foreach ($request->all() as $key => $value) {
+            if(in_array($key, $this->querystringWhitelist)) {
                 return true;
             }
         }
